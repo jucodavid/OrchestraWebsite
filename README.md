@@ -13,7 +13,7 @@ As we learn more and dedicate time to the project, we anticipate coming up with 
 - Useful for the *kot-à-projet* community.
 - Personal curiosities to explore new web development concepts and techniques.
 
-#How to Use This Repository
+# How to Use This Repository
 This repository will contain:
 - Code for the website’s front-end and back-end.
 - Notes and documentation about our learning process.
