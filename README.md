@@ -19,5 +19,13 @@ This repository will contain:
 - Notes and documentation about our learning process.
 - Ideas for new features and updates.
 
+# Ideas
+
+Pour chaque évènement on peut rajouter les photos (faire en sorte que ça soit relativement accessible de pouvoir ajouter des photos) 
+et ces photos seront automatiquement ajoutées dans la liste générale des photos dans l'onglet "Photos" et qui seront dans l'ordre de 
+la date assignée à l'événement. Donc si on rajoute des photos à un événement du début d'année alors qu'il y a déjà d'autre photo pour
+un event milieu d'année ca les rajoute tout au debut de la liste. Un peu comme google photo qui détecte direct quand l'image a été prise
+et la rajoute dans l'album au moment de la création de la photo et pas du rajout.
+
 Feel free to suggest some ideas as we build this project!
 
