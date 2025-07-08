@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Planificateur de Répétitions</title>
+    <title>Planificateur de répétitions</title>
     <style>
         /* Import de Google Fonts - Vous pouvez changer la police ici */
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
@@ -77,12 +77,12 @@
         }
 
         .file-drop-zone:hover {
-            border-color: #8B0000;
+            border-color: #74140b;
             background: rgba(139, 0, 0, 0.05);
         }
 
         .file-drop-zone.dragover {
-            border-color: #8B0000;
+            border-color: #74140b;
             background: rgba(139, 0, 0, 0.1);
             transform: scale(1.02);
         }
@@ -112,7 +112,7 @@
         .parameters-title {
             font-size: 18px;
             font-weight: 600;
-            color: #8B0000;
+            color: #74140b;
             margin-bottom: 20px;
         }
 
@@ -148,7 +148,7 @@
             width: 20px;
             height: 20px;
             border-radius: 50%;
-            background: #8B0000;
+            background: #74140b;
             cursor: pointer;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
@@ -157,7 +157,7 @@
             width: 20px;
             height: 20px;
             border-radius: 50%;
-            background: #8B0000;
+            background: #74140b;
             cursor: pointer;
             border: none;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
@@ -167,11 +167,11 @@
             min-width: 40px;
             text-align: center;
             font-weight: 600;
-            color: #8B0000;
+            color: #74140b;
         }
 
         .generate-button {
-            background: linear-gradient(135deg, #8B0000 0%, #A0522D 100%);
+            background: linear-gradient(135deg, #74140b 0%, #A0522D 100%);
             color: white;
             border: none;
             padding: 15px 30px;
@@ -221,12 +221,12 @@
         }
 
         .tab.active {
-            color: #8B0000;
-            border-bottom-color: #8B0000;
+            color: #74140b;
+            border-bottom-color: #74140b;
         }
 
         .tab:hover {
-            color: #8B0000;
+            color: #74140b;
         }
 
         .tab-content {
@@ -244,7 +244,7 @@
         .table-title {
             font-size: 20px;
             font-weight: 600;
-            color: #8B0000;
+            color: #74140b;
             margin-bottom: 15px;
         }
 
@@ -282,7 +282,7 @@
         .status-available {
             background: #d4edda;
             color: #155724;
-            padding: 4px 8px;
+            padding: 6px 10px;
             border-radius: 6px;
             font-size: 12px;
             font-weight: 500;
@@ -291,7 +291,7 @@
         .status-maybe {
             background: #fff3cd;
             color: #856404;
-            padding: 4px 8px;
+            padding: 6px 10px;
             border-radius: 6px;
             font-size: 12px;
             font-weight: 500;
@@ -300,7 +300,7 @@
         .status-unavailable {
             background: #f8d7da;
             color: #721c24;
-            padding: 4px 8px;
+            padding: 6px 10px;
             border-radius: 6px;
             font-size: 12px;
             font-weight: 500;
@@ -309,7 +309,7 @@
         .status-repeat {
             background: #d4edda;
             color: #155724;
-            padding: 4px 8px;
+            padding: 6px 10px;
             border-radius: 6px;
             font-size: 12px;
             font-weight: 500;
@@ -318,7 +318,16 @@
         .status-no-repeat {
             background: #e2e3e5;
             color: #6c757d;
-            padding: 4px 8px;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .status-assigned-absent {
+            background: #f8d7da;
+            color: #b62914;
+            padding: 6px 10px;
             border-radius: 6px;
             font-size: 12px;
             font-weight: 500;
@@ -417,13 +426,28 @@
             transform: translateY(-2px);
             box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
         }
+
+        .site-title {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;        /* espace entre logo et texte */
+            font-size: 1.7rem;    /* ou ce que tu veux */
+        }
+
+        .logo–header {
+            height: 1em;        /* adapte à la hauteur de la ligne */
+            width: auto;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="sidebar">
             <div>
-                <h1>🎼 Planificateur</h1>
+                <h1 class="site-title">
+                    <img src="logo_orchestra.png" alt="Logo Orchestra" class="logo–header">
+                    Orchestranificateur
+                </h1>
                 <p class="subtitle">Créez votre planning de répétitions automatiquement</p>
             </div>
 
@@ -467,6 +491,14 @@
                     <div class="slider-container">
                         <input type="range" class="slider" id="load-penalty" min="1" max="10" value="2">
                         <span class="slider-value" id="load-penalty-value">2</span>
+                    </div>
+                </div>
+
+                <div class="parameter-group">
+                    <label class="parameter-label">Seuil d'absence autorisé (0-3)</label>
+                    <div class="slider-container">
+                        <input type="range" class="slider" id="absence-threshold" min="0" max="3" value="0">
+                        <span class="slider-value" id="absence-threshold-value">0</span>
                     </div>
                 </div>
 
@@ -579,7 +611,7 @@
                                     <tr>
                                         <th>Morceau</th>
                                         <th>Jour</th>
-                                        <th>Créneau</th>
+                                        <th>Heures</th>
                                         <th>Participants</th>
                                     </tr>
                                 </thead>
@@ -603,8 +635,19 @@
         // Variables pour stocker les fichiers
         let disponibilitesFile = null;
         let repartitionFile = null;
+        // Au sommet de ton <script> ou dans un bloc DOMContentLoaded
+        const emptyState   = document.getElementById('empty-state');
+        const loading      = document.getElementById('loading');
+        const results      = document.getElementById('results');
+        const generateBtn  = document.getElementById('generate-btn');
+        const downloadBtn  = document.getElementById('download-btn');
 
         // Gestion des sliders
+        const absenceSlider = document.getElementById('absence-threshold');
+        const absenceSliderValue = document.getElementById('absence-threshold-value');
+        absenceSlider.addEventListener('input', () => {
+            absenceSliderValue.textContent = absenceSlider.value;
+        });
         const sliders = document.querySelectorAll('.slider');
         sliders.forEach(slider => {
             const valueSpan = document.getElementById(slider.id + '-value');
@@ -707,86 +750,89 @@
             const table = document.getElementById(tableId);
             const thead = table.querySelector('thead');
             const tbody = table.querySelector('tbody');
-            
+
             thead.innerHTML = '';
             tbody.innerHTML = '';
+
+            if (!data || data.length === 0) return;
+
             
-            if (data.length === 0) return;
-            data = data.map(row => {
-                const newRow = {};
-                Object.keys(row).forEach(key => {
-                    newRow[key] = row[key] === null || row[key] === 'null' ? 'TBD' : row[key];
+            function normalizeKeys(obj) {
+                const newObj = {};
+                Object.keys(obj).forEach(k => {
+                    newObj[k.toLowerCase()] = obj[k]; // Si je retire ce .toLowerCase(), ça fait buguer le tableau jsp pq
                 });
-                return newRow;
-            });
-            
-            const headerRow = document.createElement('tr');
-            const firstRow = data[0];
-            
+                return newObj;
+            }
+
+            const firstRow = normalizeKeys(data[0]);
+            let musiciens = [];
+            let headerRow = document.createElement('tr');
+
             if (isRepartition) {
-                headerRow.innerHTML = '<th>Morceau</th><th>Créneau</th>';
-                Object.keys(firstRow).forEach(key => {
-                    if (key !== 'morceau' && key !== 'creneau') {
-                        headerRow.innerHTML += `<th>${key}</th>`;
-                    }
+                // Collect all keys except 'jour', 'heures', 'morceau'
+                musiciens = Object.keys(firstRow).filter(
+                    key => key !== 'jour' && key !== 'heures' && key !== 'morceau'
+                );
+                // Always put 'Jour', 'Heures', 'Morceau' first
+                headerRow.innerHTML = '<th>Jour</th><th>Heures</th><th>Morceau</th>';
+                musiciens.forEach(key => {
+                    headerRow.innerHTML += `<th>${key}</th>`;
                 });
             } else {
-                headerRow.innerHTML = '<th>Créneau</th>';
-                Object.keys(firstRow).forEach(key => {
-                    if (key !== 'creneau') {
-                        headerRow.innerHTML += `<th>${key}</th>`;
-                    }
+                // Collect all keys except 'jour', 'heures'
+                musiciens = Object.keys(firstRow).filter(
+                    key => key !== 'jour' && key !== 'heures'
+                );
+                headerRow.innerHTML = '<th>Jour</th><th>Heures</th>';
+                musiciens.forEach(key => {
+                    headerRow.innerHTML += `<th>${key}</th>`;
                 });
             }
-            
             thead.appendChild(headerRow);
-            
-            data.forEach(row => {
+
+            data.forEach(rowOrig => {
+                const row = normalizeKeys(rowOrig);
                 const tr = document.createElement('tr');
-                
+
                 if (isRepartition) {
-                    tr.innerHTML = `<td>${row.morceau}</td><td>${row.creneau}</td>`;
-                    Object.keys(row).forEach(key => {
-                        if (key !== 'morceau' && key !== 'creneau') {
-                            let cellClass = '';
-                            let cellText = '';
-                            
-                            if (row[key] === 'repete') {
-                                cellClass = 'status-repeat';
-                                cellText = 'Répète';
-                            } else {
-                                cellClass = 'status-no-repeat';
-                                cellText = '';
-                            }
-                            
-                            tr.innerHTML += `<td><span class="${cellClass}">${cellText}</span></td>`;
+                    tr.innerHTML = `<td>${row['jour'] || ''}</td><td>${row['heures'] || ''}</td><td>${row['morceau'] || ''}</td>`;
+                    // Then all musiciens
+                    musiciens.forEach(key => {
+                        let cellClass = '';
+                        let cellText = '';
+                        if (row[key] === 'repete') {
+                            cellClass = 'status-repeat';
+                            cellText = 'Répète';
+                        } else if (row[key] === 'absent') {
+                            cellClass = 'status-assigned-absent';
+                            cellText = 'Répète';
+                        } else {
+                            cellClass = 'status-no-repeat';
+                            cellText = '  ';
                         }
+                        tr.innerHTML += `<td><span class="${cellClass}">${cellText}</span></td>`;
                     });
                 } else {
-                    tr.innerHTML = `<td>${row.creneau}</td>`;
-                    Object.keys(row).forEach(key => {
-                        if (key !== 'creneau') {
-                            let cellClass = '';
-                            const value = row[key];
-                            
-                            if (value === 'oui') {
-                                cellClass = 'status-available';
-                            } else if (value === 'peut-être') {
-                                cellClass = 'status-maybe';
-                            } else {
-                                cellClass = 'status-unavailable';
-                            }
-                            
-                            tr.innerHTML += `<td><span class="${cellClass}">${value}</span></td>`;
+                    tr.innerHTML = `<td>${row['jour'] || ''}</td><td>${row['heures'] || ''}</td>`;
+                    musiciens.forEach(key => {
+                        let cellClass = '';
+                        const value = row[key];
+                        if (value === 'oui') {
+                            cellClass = 'status-available';
+                        } else if (value === 'peut-être') {
+                            cellClass = 'status-maybe';
+                        } else {
+                            cellClass = 'status-unavailable';
                         }
+                        tr.innerHTML += `<td><span class="${cellClass}">${value || ''}</span></td>`;
                     });
                 }
-                
                 tbody.appendChild(tr);
             });
         }
 
-        // Fonction pour remplir le planning final
+        // Fonction pour remplir le planning final je dois encore y regarder
         function fillPlanningTable(data) {
             const tbody = document.getElementById('planning-final-body');
             tbody.innerHTML = '';
@@ -805,11 +851,14 @@
 
         // Fonction principale de génération
         async function generatePlanning() {
-            const generateBtn = document.getElementById('generate-btn');
-            const emptyState = document.getElementById('empty-state');
-            const loading = document.getElementById('loading');
-            const results = document.getElementById('results');
-            const downloadBtn = document.getElementById('download-btn');
+            const formData = new FormData();
+            formData.append('repartition', repartitionFile);
+            formData.append('disponibilites', disponibilitesFile);
+            formData.append('maybe_penalty', document.getElementById('maybe-penalty').value);
+            formData.append('max_load', document.getElementById('max-load').value);
+            formData.append('load_penalty', document.getElementById('load-penalty').value);
+            formData.append('group_bonus', document.getElementById('group-bonus').value);
+            formData.append('absence_threshold', document.getElementById('absence-threshold').value);
 
             // Afficher le loading
             emptyState.style.display = 'none';
@@ -818,16 +867,9 @@
             generateBtn.disabled = true;
 
             try {
-                // Préparer les données
-                const formData = new FormData();
-                formData.append('repartition', repartitionFile);
-                formData.append('disponibilites', disponibilitesFile);
-                formData.append('maybe_penalty', document.getElementById('maybe-penalty').value);
-                formData.append('max_load', document.getElementById('max-load').value);
-                formData.append('load_penalty', document.getElementById('load-penalty').value);
-                formData.append('group_bonus', document.getElementById('group-bonus').value);
-
                 // Envoyer la requête
+                console.log("📤 Envoi de la requête au backend...");
+
                 const response = await fetch(`${API_URL}/upload`, {
                     method: 'POST',
                     body: formData

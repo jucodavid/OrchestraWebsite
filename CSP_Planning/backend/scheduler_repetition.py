@@ -2,9 +2,10 @@ import pandas as pd
 from ortools.sat.python import cp_model
 import re
 from collections import defaultdict
+import time
 
 class RepetitionScheduler:
-    def __init__(self, repartitions_file: str, disponibilites_file: str, maybe_penalty: int, max_load: int, load_penalty: int, group_bonus: int):
+    def __init__(self, repartitions_file: str, disponibilites_file: str, maybe_penalty: int, max_load: int, load_penalty: int, group_bonus: int, seuil_absence: int = 0):
         """
         Args:
             repartitions_file: Fichier Excel des répartitions donc avec les morceaux et participants
@@ -15,8 +16,13 @@ class RepetitionScheduler:
 
         self.musiciens = set()          # Liste des musiciens : ["Adèle", "Antoine", "Bastien...lol...bonhomme qui sourit 
                                         # à pleine dents"]
+        self.musiciens_absents_force = defaultdict(set)  # morceau -> {musiciens absents mais contraints}
+        self.absent_participants = defaultdict(lambda: defaultdict(list))  # morceau -> {musiciens absents mais assignés malgré leur indisponibilité}
+
         self.morceaux = []              # Liste des morceaux : ["morceau1" ,"morceau2"]
         self.repartition = {}
+        self.repartition_absents = defaultdict(list)  # morceau -> [BoolVars des absences]
+
         self.disponibilites = {}        # musicien -> {créneau1: "oui"/"non"/"peut-être"} (ici j'utilise de l'optimisation
                                         # notamment pcq on peut avoir des "peut-être")
         
@@ -39,6 +45,7 @@ class RepetitionScheduler:
         self.max_load = max_load             # Nombre max de créneaux par jour
         self.load_penalty = load_penalty     # Pénalité si le musicien est surchargé
         self.group_bonus = group_bonus       # Gain pour les répétitions groupées
+        self.seuil_absence = seuil_absence
 
     def transformer_simple(self, texte):
         """
@@ -116,38 +123,86 @@ class RepetitionScheduler:
 
 
     def define_variables(self):
+        """
+        - self.is_assigned[morceau] = BoolVar: 1 si on affecte le morceau à un slot
+        - self.assignments[morceau] = IntVar en [0..N], N == len(self.creneaux) => 
+            valeurs 0..N-1 = index de créneau, N = “pas affecté”
+        """
         self.is_assigned = {}
+        self.assignments = {}
 
+        domain_max = len(self.creneaux)  # valeur hors plage = “pas assigné”
         for morceau in self.morceaux:
-            domain_max = len(self.creneaux)
-            self.assignments[morceau] = self.model.NewIntVar(0, domain_max, f"assignment_{morceau}")
-            self.is_assigned[morceau] = self.model.NewBoolVar(f"is_assigned_{morceau}")
-            self.model.Add(self.assignments[morceau] < domain_max).OnlyEnforceIf(self.is_assigned[morceau])
-            self.model.Add(self.assignments[morceau] == domain_max).OnlyEnforceIf(self.is_assigned[morceau].Not())
+            # Booléen d'affectation
+            b = self.model.NewBoolVar(f"is_assigned_{morceau}")
+            self.is_assigned[morceau] = b
+
+            # IntVar slot (0..N)
+            v = self.model.NewIntVar(0, domain_max, f"assignment_{morceau}")
+            self.assignments[morceau] = v
+
+            # si b=1 alors v < domain_max ; si b=0 alors v == domain_max
+            self.model.Add(v < domain_max).OnlyEnforceIf(b)
+            self.model.Add(v == domain_max).OnlyEnforceIf(b.Not())
+
 
 
     # 1st constraint : dipsonibilité "oui" "non" "peut-être"
     def add_disponibility_constraints(self):
         for morceau, musiciens in self.repartition.items():
-            for musicien in musiciens:
-                for slot in self.creneaux:
-                    slot_idx = self.slot_index[slot]
-                    is_dispo = self.disponibilites[musicien].get(slot, "non").lower()
+            for slot in self.creneaux:
+                slot_idx = self.slot_index[slot]
 
-                    is_here = self.model.NewBoolVar(f"{morceau}_{slot}_is_here")
-                    self.model.Add(self.assignments[morceau] == slot_idx).OnlyEnforceIf(is_here)
-                    self.model.Add(self.assignments[morceau] != slot_idx).OnlyEnforceIf(is_here.Not())
+                # 1) est-ce que j'affecte ce morceau à ce slot ?
+                is_here = self.model.NewBoolVar(f"{morceau}_{slot}_is_here")
+                self.model.Add(self.assignments[morceau] == slot_idx)   .OnlyEnforceIf(is_here)
+                self.model.Add(self.assignments[morceau] != slot_idx)   .OnlyEnforceIf(is_here.Not())
 
-                    # Si dispo == non → contrainte dure (seulement si le morceau est assigné)
-                    if is_dispo == "non":
-                        self.model.Add(self.assignments[morceau] != slot_idx).OnlyEnforceIf(self.is_assigned[morceau])
+                absent_flags = []
+                # boucle sur chaque musicien du morceau
+                for musicien in musiciens:
+                    dispo = self.disponibilites[musicien].get(slot, "non").strip().lower()
 
-                    # Si dispo == peut-être → pénalité
-                    if is_dispo == "peut-être":
-                        penalty = self.model.NewIntVar(0, self.maybe_penalty, f"penalty_{morceau}_{slot}_{musicien}")
-                        self.model.Add(penalty == self.maybe_penalty).OnlyEnforceIf(is_here)
-                        self.model.Add(penalty == 0).OnlyEnforceIf(is_here.Not())
-                        self.penalties.append(penalty)
+                    if dispo == "oui":
+                        # pas d'absent_flag, pas de pénalité
+                        continue
+
+                    # 2) création du flag d'absence
+                    absent = self.model.NewBoolVar(f"{morceau}_{slot}_{musicien}_absent")
+                    # absent ⇒ is_here et inverse
+                    self.model.Add(is_here == 1).OnlyEnforceIf(absent)
+                    self.model.Add(is_here == 0).OnlyEnforceIf(absent.Not())
+                    absent_flags.append(absent)
+
+                    # 3) on pénalise selon le type d'absence
+                    if dispo == "non":
+                        # penalty_non : par défaut tu peux mettre 1, ou tout coefficient que tu veux
+                        pen_non = self.model.NewIntVar(0, self.max_load, f"pen_non_{morceau}_{slot}_{musicien}")
+                        # si absent alors on ajoute la pénalité
+                        self.model.Add(pen_non == 1).OnlyEnforceIf(absent)
+                        self.model.Add(pen_non == 0).OnlyEnforceIf(absent.Not())
+                        self.penalties.append(pen_non)
+
+                    elif dispo == "peut-être":
+                        pen_maybe = self.model.NewIntVar(0, self.maybe_penalty,
+                                                        f"pen_maybe_{morceau}_{slot}_{musicien}")
+                        self.model.Add(pen_maybe == self.maybe_penalty).OnlyEnforceIf(absent)
+                        self.model.Add(pen_maybe == 0).OnlyEnforceIf(absent.Not())
+                        self.penalties.append(pen_maybe)
+
+                    # pour ton post-processing
+                    self.absent_participants[morceau].setdefault(slot, []).append((musicien, absent))
+
+                # 4) seuil d’absences par morceau/slot
+                if absent_flags:
+                    sum_abs = self.model.NewIntVar(0, len(absent_flags),
+                                                f"{morceau}_{slot}_sum_absents")
+                    # on somme tous les flags
+                    self.model.Add(sum_abs == sum(absent_flags))
+                    # si on place le morceau ici ⇒ sum_abs ≤ seuil_absence
+                    self.model.Add(sum_abs <= self.seuil_absence).OnlyEnforceIf(is_here)
+
+
 
 
     # 2nd: Un créneau n'accueille qu'un morceau
@@ -239,33 +294,74 @@ class RepetitionScheduler:
         self.model.Minimize(sum(self.penalties))
 
     def build_model(self):
-        """on regroupe dans une fonction le modèle mathématique"""
+        # 1) (re)création du modèle
+        self.model = cp_model.CpModel()
+
+        # 2) définir les variables
         self.define_variables()
 
-        ### Contraintes (mettre en commentaire les moins importantes si probleme trop contraint)
-        self.add_disponibility_constraints()            # jouer avec la pénalité pour "peut-être"
+        # 3) ajouter toutes les contraintes
+        self.add_disponibility_constraints()
         self.add_slot_constraints()
-        self.add_daily_load_constraints()               # varier le nombre de créneaux max par jour et jouer avec la pénalité
-        self.add_penalites_repetitions_groupees()       # jouer avec le gain par bloc de répétitions groupées
+        self.add_daily_load_constraints()
+        self.add_penalites_repetitions_groupees()
 
-        self.define_objective()
 
-    def solve(self):
+    def solve(self,
+            time_limit_sec: float = 60,
+            num_workers: int = 8):
+        """
+        Construit le modèle (via build_model), résout, et extrait :
+        - status
+        - solution dict morceau->slot
+        - num_unassigned
+        - total_penalty
+        """
+
+        self.solver = cp_model.CpSolver()
+        self.solver.parameters.max_time_in_seconds = time_limit_sec
+        self.solver.parameters.num_search_workers = num_workers
+
+        self.penalties = []
+        self.musiciens_absents_force.clear()
         self.build_model()
-        status = self.solver.Solve(self.model)
 
-        if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
-            print("Solution trouvée !")
-            count = 0
+        # --- Minimiser les pénalités collectées dans self.penalties ---
+        self.model.Minimize(sum(self.penalties))
+
+        # --- Solve ---
+        start = time.time()
+        status = self.solver.Solve(self.model)
+        duration = time.time() - start
+        print(f"Solve status = {self.solver.StatusName(status)} en {duration:.1f}s")
+
+        # --- Post‐processing ---
+        num_unassigned = 0
+        total_penalty = 0
+
+        if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            # récupérer la pénalité
+            total_penalty = sum(self.solver.Value(p) for p in self.penalties)
+
             for morceau in self.morceaux:
-                if self.solver.BooleanValue(self.is_assigned[morceau]):
-                    slot_index = self.solver.Value(self.assignments[morceau])
-                    self.solution[morceau] = self.creneaux[slot_index]
+                if self.solver.Value(self.is_assigned[morceau]):
+                    idx = self.solver.Value(self.assignments[morceau])
+                    slot = self.creneaux[idx]
+                    self.solution[morceau] = slot
+
+                    # repérer les absents forcés
+                    for (mus, flag) in self.absent_participants[morceau].get(slot, []):
+                        if self.solver.Value(flag):
+                            self.musiciens_absents_force[morceau].add(mus)
                 else:
-                    count += 1
-            print(f"{count} morceaux non assignés.")
+                    num_unassigned += 1
+
+            print(f"✅ {len(self.solution)} assignés, {num_unassigned} non-assignés, pénalité totale = {total_penalty}")
         else:
-            print("Aucune solution trouvée.")
+            print("⚠️ Aucune solution trouvée")
+
+        return status, self.solution, num_unassigned, total_penalty
+
 
     def generer_planning(self):
         self.load_data()
@@ -273,219 +369,200 @@ class RepetitionScheduler:
         self.solve()
 
     def export_planning(self, output_file):
-        import openpyxl
+        from openpyxl import load_workbook
         from openpyxl.styles import PatternFill
-        from openpyxl.utils.dataframe import dataframe_to_rows
-        from openpyxl import Workbook
 
-        data = []
-
+        # --- 1) DataFrame "Planning" ---
+        rows = []
         for morceau in self.morceaux:
-            if morceau not in self.solution:
-                data.append({
-                    "Morceau": morceau,
-                    "Jour": "Non assigné",
-                    "Créneau": "Non assigné",
-                    "Participants": ", ".join(self.repartition.get(morceau, []))
-                })
-            else:
+            if morceau in self.solution:
                 slot = self.solution[morceau]
-                if not isinstance(slot, str) or "_" not in slot:
-                    jour = "Invalide"
-                    horaire = slot
-                else:
-                    parts = slot.split("_")
-                    jour = parts[0]
-                    horaire = "_".join(parts[1:]) if len(parts) > 1 else ""
+                jour, horaire = slot.split("_", 1)
+            else:
+                jour, horaire = "Non assigné", "Non assigné"
+            participants = ", ".join(self.repartition.get(morceau, []))
+            rows.append({
+                "Morceau": morceau,
+                "Jour":    jour,
+                "Créneau": horaire,
+                "Participants": participants
+            })
+        df_plan = pd.DataFrame(rows)
+        # tri des jours
+        ordre_jours = ["LUN","MAR","MER","JEU","VEN","SAM","DIM","Non assigné"]
+        df_plan["Jour"] = pd.Categorical(df_plan["Jour"],
+                                         categories=ordre_jours,
+                                         ordered=True)
+        df_plan.sort_values(["Jour","Créneau"], inplace=True)
 
-                participants = ", ".join(self.repartition.get(morceau, []))
+        # --- 2) DataFrame "Disponibilités" ---
+        # on veut un tableau à plat : une ligne par créneau, colonnes musiciens
+        # tri des créneaux
+        def jour_cle(s):
+            j = s.split("_",1)[0]
+            return (ordre_jours.index(j) if j in ordre_jours else 99, s)
+        slots = sorted(self.creneaux, key=jour_cle)
+        musiciens = sorted(self.musiciens)
 
-                data.append({
-                    "Morceau": morceau,
-                    "Jour": jour,
-                    "Créneau": horaire,
-                    "Participants": participants
-                })
+        dispo_dict = {"Créneau": slots}
+        for m in musiciens:
+            dispo_dict[m] = [
+                self.disponibilites.get(m, {})
+                                   .get(s, "non")
+                                   .strip().lower()
+                for s in slots
+            ]
+        df_dispo = pd.DataFrame(dispo_dict)
 
-        # === Création du fichier Excel avec plusieurs feuilles ===
-        wb = Workbook()
-        ws_planning = wb.active
-        ws_planning.title = "Planning"
-
-        if data:
-            df = pd.DataFrame(data)
-            ordre_jours = ["LUN", "MAR", "MER", "JEU", "VEN", "SAM", "DIM", "Non assigné"]
-            if "Jour" in df.columns:
-                df["Jour"] = pd.Categorical(df["Jour"], categories=ordre_jours, ordered=True)
-
-            try:
-                df = df.sort_values(by=["Jour", "Créneau"])
-            except KeyError as e:
-                print(f"Erreur lors du tri : {e}")
-
-            for r in dataframe_to_rows(df, index=False, header=True):
-                ws_planning.append(r)
-        else:
-            ws_planning.append(["Aucune donnée disponible"])
-
-        # === Tableaux de disponibilités colorés ===
-        # Définir les couleurs
-        fill_oui = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")      # vert
-        fill_peut_etre = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid") # jaune/orange
-        fill_non = PatternFill(start_color="F2DCDB", end_color="F2DCDB", fill_type="solid")       # rouge
-        
-        # Couleurs pour le tableau de répartition
-        fill_repete = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")    # vert si répète
-        fill_non_repete = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid") # gris si ne répète pas
-
-        for weekend in [1, 2]:
-            weekend_name = f"Weekend{weekend}"
-            ws = wb.create_sheet(title=weekend_name)
-
-            # Créneaux de ce weekend avec ordre VEN->SAM->DIM
-            slots = [slot for slot in self.creneaux if f"_{weekend}_" in slot]
-            
-            # Fonction pour trier les créneaux dans l'ordre VEN->SAM->DIM
-            def sort_key(slot):
-                parts = slot.split("_")
-                jour = parts[0]
-                # Ordre souhaité : VEN, SAM, DIM
-                if jour == "VEN":
-                    return (0, slot)
-                elif jour == "SAM":
-                    return (1, slot)
-                elif jour == "DIM":
-                    return (2, slot)
-                else:
-                    return (3, slot)  # autres jours en fin
-            
-            slots.sort(key=sort_key)
-            musiciens = sorted(self.musiciens)
-
-            # === PREMIER TABLEAU : Disponibilités ===
-            ws.append(["DISPONIBILITÉS"])
-            ws.append(["","Créneau"] + musiciens)
-
-            start_row_dispo = 2
-            for i, slot in enumerate(slots, start=3):  # ligne 3 car titre en ligne 1 et header en ligne 2
-                ws.cell(row=i, column=2).value = slot
-                for j, musicien in enumerate(musiciens, start=3):  # colonne 3 car créneau en col 2
-                    dispo = self.disponibilites.get(musicien, {}).get(slot, "non").strip().lower()
-                    cell = ws.cell(row=i, column=j)
-                    cell.value = dispo
-
-                    if dispo == "oui":
-                        cell.fill = fill_oui
-                    elif dispo == "peut-être":
-                        cell.fill = fill_peut_etre
+        # --- 3) DataFrames "Répartition_W1" et "Répartition_W2" ---
+        rep_dfs = {}
+        for wk in (1,2):
+            wk_slots = [s for s in slots if s.endswith(f"_{wk}")]
+            rep_dict = {"Morceau": [], "Créneau": wk_slots}
+            for m in musiciens:
+                rep_dict[m] = []
+            for s in wk_slots:
+                # retrouver le morceau joué à ce créneau
+                piece = next((
+                    p for p,sl in self.solution.items() if sl==s
+                ), None)
+                rep_dict["Morceau"].append(piece or "Aucun")
+                for m in musiciens:
+                    if piece and m in self.repartition.get(piece, []):
+                        rep_dict[m].append("Répète")
                     else:
-                        cell.fill = fill_non
+                        rep_dict[m].append("")
+            rep_dfs[f"Répartition_W{wk}"] = pd.DataFrame(rep_dict)
 
-            # === DEUXIÈME TABLEAU : Répartition ===
-            # Ligne vide pour séparer les tableaux
-            last_row_dispo = len(slots) + 3
-            ws.append([""])  # ligne vide
-            ws.append(["RÉPARTITION"])
-            ws.append(["Morceau joué", "Créneau"] + musiciens)
+        # --- 4) Écriture initiale via pandas ---
+        with pd.ExcelWriter(output_file, engine="openpyxl") as writer:
+            df_plan.to_excel(writer,      sheet_name="Planning",      index=False)
+            df_dispo.to_excel(writer,     sheet_name="Disponibilités", index=False)
+            for sheet, df in rep_dfs.items():
+                df.to_excel(writer, sheet_name=sheet, index=False)
 
-            start_row_repartition = last_row_dispo + 3
-            for i, slot in enumerate(slots, start=start_row_repartition):
-                ws.cell(row=i, column=2).value = slot
-                
-                # Trouver le morceau joué à ce créneau
-                morceau_joue = None
-                for morceau, assigned_slot in self.solution.items():
-                    if assigned_slot == slot:
-                        morceau_joue = morceau
-                        break
-                
-                ws.cell(row=i, column=1).value = morceau_joue or "Aucun"
-                
-                # Pour chaque musicien, colorier selon s'il répète ou non
-                for j, musicien in enumerate(musiciens, start=3):  # colonne 3 car créneau en col 1 et morceau en col 2
-                    cell = ws.cell(row=i, column=j)
-                    
-                    # Vérifier si le musicien répète ce morceau
-                    if morceau_joue and musicien in self.repartition.get(morceau_joue, []):
-                        cell.value = "Répète"
+        # --- 5) Re-ouverture et stylage avec openpyxl ---
+        wb = load_workbook(output_file)
+        # styles dispo
+        fill_yes    = PatternFill(fill_type="solid", fgColor="C6EFCE")
+        fill_maybe  = PatternFill(fill_type="solid", fgColor="FFEB9C")
+        fill_no     = PatternFill(fill_type="solid", fgColor="F2DCDB")
+        ws = wb["Disponibilités"]
+        for row in ws.iter_rows(min_row=2, min_col=2):
+            for cell in row:
+                v = (cell.value or "").strip().lower()
+                if v=="oui":       cell.fill = fill_yes
+                elif v in ("peut-être","peut‐être"): cell.fill = fill_maybe
+                else:               cell.fill = fill_no
+
+        # styles répartition
+        fill_repete     = PatternFill(fill_type="solid", fgColor="C6EFCE")
+        fill_non_repete = PatternFill(fill_type="solid", fgColor="D3D3D3")
+        for wk in (1,2):
+            ws = wb[f"Répartition_W{wk}"]
+            # colonnes à partir de la 3ᵉ (les musiciens)
+            for row in ws.iter_rows(min_row=2, min_col=3):
+                for cell in row:
+                    if cell.value=="Répète":
                         cell.fill = fill_repete
                     else:
-                        cell.value = ""
                         cell.fill = fill_non_repete
 
-        # === Sauvegarde finale ===
         wb.save(output_file)
-        print(f"✅ Planning et disponibilités exportés dans {output_file}")
+        print(f"✅ Planning exporté dans {output_file}")
 
     def get_json_data(self):
         """
-        Construit les données attendues par le frontend sous forme de dictionnaire
+        Construit les données attendues par le frontend sous forme de dictionnaire,
+        en séparant les colonnes Jour / Heures et en triant correctement les créneaux.
         """
-        data = []
+        # ordre des jours pour le tri
+        DAY_ORDER = {"LUN":1, "MAR":2, "MER":3, "JEU":4,
+                    "VEN":5, "SAM":6, "DIM":7}
+        # noms complets pour l’affichage
+        DAY_NAMES = {
+            "LUN":"Lundi", "MAR":"Mardi", "MER":"Mercredi",
+            "JEU":"Jeudi","VEN":"Vendredi",
+            "SAM":"Samedi","DIM":"Dimanche"
+        }
 
+        def slot_sort_key(slot: str):
+            # ex slot = "VEN_1_10-12"
+            jour, _, plage = slot.split("_")
+            start, _ = plage.split("-")
+            h, m = (start.split(":") + ["00"])[:2]
+            return (DAY_ORDER[jour], int(h), int(m))
+
+        def format_slot(slot: str):
+            # retourne (Jour, Heures)
+            jour, _, plage = slot.split("_")
+            start, end = plage.split("-")
+            def fmt(x):
+                h, m = (x.split(":") + ["00"])[:2]
+                return f"{int(h)}h{m:>02}"
+            return DAY_NAMES[jour], f"{fmt(start)}-{fmt(end)}"
+
+        # 1) planning général Morceau / Jour / Heures
+        data = []
         for morceau in self.morceaux:
             if morceau not in self.solution:
                 data.append({
                     "Morceau": morceau,
-                    "Jour": "Non assigné",
-                    "Créneau": "Non assigné",
+                    "Jour":     "Non assigné",
+                    "Heures":   "—",
                     "Participants": ", ".join(self.repartition.get(morceau, []))
                 })
             else:
                 slot = self.solution[morceau]
-                if not isinstance(slot, str) or "_" not in slot:
-                    jour = "Invalide"
-                    horaire = slot
-                else:
-                    parts = slot.split("_")
-                    jour = parts[0]
-                    horaire = "_".join(parts[1:]) if len(parts) > 1 else ""
-
-                participants = ", ".join(self.repartition.get(morceau, []))
-
+                jour, heures = format_slot(slot)
                 data.append({
                     "Morceau": morceau,
-                    "Jour": jour,
-                    "Créneau": horaire,
-                    "Participants": participants
+                    "Jour":     jour,
+                    "Heures":   heures,
+                    "Participants": ", ".join(self.repartition.get(morceau, []))
                 })
 
-        # === Construction des tableaux Disponibilités et Répartition pour le frontend ===
+        # 2) disponibilités et répartition par weekend
         disponibilites = {"weekend1": [], "weekend2": []}
-        repartition = {"weekend1": [], "weekend2": []}
+        repartition     = {"weekend1": [], "weekend2": []}
+        musiciens = sorted(self.musiciens)
 
-        for weekend in [1, 2]:
-            slots = [slot for slot in self.creneaux if f"_{weekend}_" in slot]
-            slots.sort()  # Trie basique, adapte si besoin
+        for w in (1, 2):
+            raw_slots = [s for s in self.creneaux if f"_{w}_" in s]
+            slots     = sorted(raw_slots, key=slot_sort_key)
 
-            musiciens = sorted(self.musiciens)
-
-            # Tableaux de disponibilités
+            # tableau disponibilités
             for slot in slots:
-                row = {"creneau": slot}
-                for musicien in musiciens:
-                    dispo = self.disponibilites.get(musicien, {}).get(slot, "non").strip().lower()
-                    row[musicien] = dispo
-                disponibilites[f"weekend{weekend}"].append(row)
+                jour, heures = format_slot(slot)
+                row = {"Jour": jour, "Heures": heures}
+                for m in musiciens:
+                    d = (self.disponibilites.get(m, {})
+                                    .get(slot, "non")
+                                    .strip().lower())
+                    row[m] = d  # "oui"/"non"/"peut-être"
+                disponibilites[f"weekend{w}"].append(row)
 
-            # Tableaux de répartition
+            # tableau répartition (avec morceau et état repete/absent/non)
             for slot in slots:
-                row = {"morceau": None, "creneau": slot}
-                for morceau, assigned_slot in self.solution.items():
-                    if assigned_slot == slot:
-                        row["morceau"] = morceau
-                        break
-
-                for musicien in musiciens:
-                    if row["morceau"] and musicien in self.repartition.get(row["morceau"], []):
-                        row[musicien] = "repete"
+                jour, heures = format_slot(slot)
+                piece = next((p for p,s in self.solution.items() if s == slot), None)
+                row = {
+                    "Morceau": piece or "",
+                    "Jour":    jour,
+                    "Heures":  heures
+                }
+                for m in musiciens:
+                    if piece and m in self.repartition.get(piece, []):
+                        dispo = (self.disponibilites.get(m, {})
+                                        .get(slot, "non")
+                                        .strip().lower())
+                        row[m] = "repete" if dispo == "oui" else "absent"
                     else:
-                        row[musicien] = "non"
-
-                repartition[f"weekend{weekend}"].append(row)
+                        row[m] = "non"
+                repartition[f"weekend{w}"].append(row)
 
         return {
+            "planning":       data,
             "disponibilites": disponibilites,
-            "repartition": repartition,
-            "planning": data
+            "repartition":     repartition
         }
