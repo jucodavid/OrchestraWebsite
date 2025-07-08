@@ -13,10 +13,10 @@ Eventually, we realized that just finding _a_ solution wasn't always enough, so 
 We designed several constraints and preferences that reflect the real-life decisions we encounter when planning rehearsals.
 
 ### Basic CSP Rules
-- One song per slot
+- No overlapping slots for the same participants, one slot per song
 - A rehearsal slot is valid only if all required participants for this song are available.
 
-### Time clustering
+### Time clustering - greedy clustering (work in progress)
 - We try to **group rehearsal slots** within the same day or time window to avoid frustrating schedules like one rehearsal at 8 AM and another at 6 PM.
 
 ### Overload management
@@ -25,6 +25,9 @@ We designed several constraints and preferences that reflect the real-life decis
 
 ### Preferred hours (feature in progress)
 - Because waking up at 8 AM to rehearse isn't exactly anyone's dream, we're working on making the agent favor **rehearsals between 10 AM and 8 PM**.
+
+### Interactive refinement with threshold acceptance
+- We make acceptable a threshold number of musicians to be forced to play at a slot, so fater the solver generated the planning we can manually modify our disponibilities by asking kindly the musicians if they can adjust their schedule to fit the slot.
 
 ### Incomplete but optimized solutions
 - Sometimes no perfect solution exists, and not every songs are assigned.
@@ -55,24 +58,22 @@ venv\Scripts\activate         # On Windows
 pip install -r CSP_Planning/requirements.txt
 ```
 
-### How to run the project 
+### Execution
 
-#### 1. Start the backend
-The backend script is `back.py`. Run it with:
+#### 1. Backend
+Launch the CSP solver.
 
 ```bash
 python3 CSP_Planning/backend/back.py # MacOS
-python CSP_Planning/backend/back.py  # Windows
 ```
 
-#### 2. Start the frontend
-In another terminal run html with :
+#### 2. Frontend
+Serve the static interface
 ```bash
 python3 -m http.server 8000
 ```
 
-#### 3. Visit the website
-You can then view the website with this link : http://localhost:8000/front.html
+#### 3. Access the interface at http://localhost:8000/front.html.
 
 ---
 
