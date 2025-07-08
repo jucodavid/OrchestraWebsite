@@ -150,7 +150,7 @@ class RepetitionScheduler:
                         self.penalties.append(penalty)
 
 
-    # 2. Un créneau n'accueille qu'un morceau
+    # 2nd: Un créneau n'accueille qu'un morceau
     def add_slot_constraints(self):
         for slot in self.creneaux:
             slot_idx = self.slot_index[slot]
@@ -162,7 +162,7 @@ class RepetitionScheduler:
                 is_assigned.append(is_at_slot)
             self.model.Add(sum(is_assigned) <= 1)
 
-    # 3. Eviter les journées trop chargées
+    # 3rd: Eviter les journées trop chargées
     def add_daily_load_constraints(self):
         for musicien in self.musiciens:
             for jour, slots in self.creneaux_par_jour.items():
@@ -192,6 +192,7 @@ class RepetitionScheduler:
                     self.model.Add(penalty == 0).OnlyEnforceIf(is_overloaded.Not())
                     self.penalties.append(penalty)
 
+    # 4th: Pénalités pour les répétitions groupées
     def add_penalites_repetitions_groupees(self):
         for musicien in self.musiciens:
             for jour, slots in self.creneaux_par_jour.items():

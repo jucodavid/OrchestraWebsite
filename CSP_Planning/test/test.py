@@ -9,4 +9,4 @@ sched.load_data()
 sched.build_model()
 sched.solve()
 sched.export_planning("test_planning.xlsx")
-sched.get_json_data()  # si tu veux voir ce que ça renvoie
+sched.get_json_data()
