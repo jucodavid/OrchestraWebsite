@@ -39,7 +39,7 @@ We designed several constraints and preferences that reflect the real-life decis
 
 ```bash
 git clone <https://github.com/mat-bau/OrchestraWebsite.git>
-cd OrchestraWebnsite
+cd OrchestraWebsite
 ```
 
 ### 2. Create and activate a virtual environment (recommended)
