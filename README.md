@@ -1,31 +1,40 @@
 # OrchestraWebsite
 
-Welcome to our repository! This project is a collaborative effort between two friends aiming to learn how to build a website from scratch. Our goal is twofold:
+Welcome to our repository! 
 
-1. **Learn Web Development:** We want to acquire the skills needed to create websites by exploring both front-end and back-end development. This will expand our knowledge and push us to gain hands-on experience in full-stack web development.
+This project is a collaborative effort between university students living in the same household, known as the **Orchestrakot**. The goal of this repository is to explore and develop small tools that aim to simplify some of the everyday logistical or organizational challenges we face. What might seem like minor annoyances can end up consuming a lot of time and energy — so we’re trying to automate what we can!
 
-2. **Build Something Useful:** While learning, we want our efforts to serve a real purpose. The website we create will be used by a student flat-share project (*kot-à-projet*) in Louvain-la-Neuve. Here's what we aim to achieve:
-   - **Event Management:** Since the project regularly organizes events, the website should allow for easy event presentations and updates.
-   - **Music Lessons Database:** Maintain a database of students in Louvain-la-Neuve who are looking for music lessons, as well as a list of qualified teachers and their contact information. The website will help the *kot-à-projet* connect students with teachers efficiently.
+## First feature: A rehearsal planner
 
-### Future Plans
-As we learn more and dedicate time to the project, we anticipate coming up with additional features to implement. These may be:
-- Useful for the *kot-à-projet* community.
-- Personal curiosities to explore new web development concepts and techniques.
+As a music band, we often need to plan rehearsals during some days of the week or even big ones during weekends for bigger concerts. Our first idea was: _could we design a program that solves this kind of **Constraint Satisfaction Problem (CSP)** for us_, saving both time and mental load?
 
-# How to Use This Repository
-This repository will contain:
-- Code for the website’s front-end and back-end.
-- Notes and documentation about our learning process.
-- Ideas for new features and updates.
+Eventually, we realized that just finding _a_ solution wasn't always enough, so we transitioned from pure CSP to **Constraint Optimization Problem (COP)** to allow for more flexibility and to model preferences.
 
-# Ideas
+We designed several constraints and preferences that reflect the real-life decisions we encounter when planning rehearsals.
 
-Pour chaque évènement on peut rajouter les photos (faire en sorte que ça soit relativement accessible de pouvoir ajouter des photos) 
-et ces photos seront automatiquement ajoutées dans la liste générale des photos dans l'onglet "Photos" et qui seront dans l'ordre de 
-la date assignée à l'événement. Donc si on rajoute des photos à un événement du début d'année alors qu'il y a déjà d'autre photo pour
-un event milieu d'année ca les rajoute tout au debut de la liste. Un peu comme google photo qui détecte direct quand l'image a été prise
-et la rajoute dans l'album au moment de la création de la photo et pas du rajout.
+### Basic CSP Rules
+- One song per slot
+- A rehearsal slot is valid only if all required participants for this song are available.
 
-Feel free to suggest some ideas as we build this project!
+### Time clustering
+- We try to **group rehearsal slots** within the same day or time window to avoid frustrating schedules like one rehearsal at 8 AM and another at 6 PM.
 
+### Overload management
+- We assign penalties to overloaded schedules, e.g., too many hours on a single day.
+- This promotes better distribution and overall fairness.
+
+### Preferred hours (feature in progress)
+- Because waking up at 8 AM to rehearse isn't exactly anyone's dream, we're working on making the agent favor **rehearsals between 10 AM and 8 PM**.
+
+### Incomplete but optimized solutions
+- Sometimes no perfect solution exists, and not every songs are assigned.
+- The COP formulation allows us to still suggest the best possible outcome with **soft constraints** and **penalties** (e.g., if one member is missing or if two sessions are too far apart).
+- We still need to find a way to make the agent propose a better planning like _if someone was there at this slot we can put largely upgrade the planning_
+
+---
+
+## Bug fixes & contributions
+
+This is an evolving project! If you find any bug, weird behavior, or simply have an idea that could improve the planner or add other features for shared living, **please open an issue or contribute directly** — we’d love your help.
+
+---
