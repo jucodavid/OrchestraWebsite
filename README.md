@@ -33,6 +33,50 @@ We designed several constraints and preferences that reflect the real-life decis
 
 ---
 
+## 🚀 Getting Started
+
+### 1. Clone the repository
+
+```bash
+git clone <REPO_URL>
+cd OrchestraWebnsite
+```
+Replace <REPO_URL> with the actual URL of your Git repository.
+
+### 2. Create and activate a virtual environment (recommended)
+```bash
+python3 -m venv venv
+source venv/bin/activate      # On Linux/macOS
+venv\Scripts\activate         # On Windows
+```
+
+### 3. Install dependencies
+
+```bash
+pip install -r CSP_Planning/requirements.txt
+```
+
+### How to run the project 
+
+#### 1. Start the backend
+The backend script is `back.py`. Run it with:
+
+```bash
+python3 CSP_Planning/backend/back.py # MacOS
+python CSP_Planning/backend/back.py  # Windows
+```
+
+#### 2. Start the frontend
+In another terminal run html with :
+```bash
+python3 -m http.server 8000
+```
+
+#### 3. Visit the website
+You can then view the website with this link : http://localhost:8000/front.html
+
+---
+
 ## Bug fixes & contributions
 
 This is an evolving project! If you find any bug, weird behavior, or simply have an idea that could improve the planner or add other features for shared living, **please open an issue or contribute directly** — we’d love your help.
