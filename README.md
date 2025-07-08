@@ -38,10 +38,9 @@ We designed several constraints and preferences that reflect the real-life decis
 ### 1. Clone the repository
 
 ```bash
-git clone <REPO_URL>
+git clone <https://github.com/mat-bau/OrchestraWebsite.git>
 cd OrchestraWebnsite
 ```
-Replace <REPO_URL> with the actual URL of your Git repository.
 
 ### 2. Create and activate a virtual environment (recommended)
 ```bash
